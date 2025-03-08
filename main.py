@@ -50,8 +50,8 @@ CLIENT_ID = os.getenv("REDDIT_CLIENT_ID")
 
 
 reddit = praw.Reddit(
-    client_id=CLIENT_SECRET  # Your client_id
-    client_secret=CLIENT_ID,  # Your client_secret
+    client_id=CLIENT_ID,  # Your client_id
+    client_secret=CLIENT_SECRET,  # Your client_secret
     user_agent="python:ai-hub:v1.0 (by /u/Last_Internet_9156)"  # Your custom user agent
 )
 
