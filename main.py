@@ -198,16 +198,45 @@ async def fetch_blogs(query: str, max_results: int = 5):
 
 
 @app.get("/search-ai-repos")
-async def search_ai_repositories(q: str = Query(..., title="Search Query")):
+async def search_ai_repositories(q: str = Query(..., title="Search Query"),
+    max_results: int = Query(10, title="Max Results Per Page"),
+    page: int = Query(1, title="Page Number")):
     """Route for fetching AI repositories from GitHub."""
-    return {"repositories": await fetch_github_repos(q)}
+    repos = await fetch_github_repos(q, per_page=max_results, page=page)
+    return {
+        "page": page,
+        "max_results": max_results,
+        "repos": repos
+    }
 
 
 @app.get("/search-arxiv-papers")
-async def search_arxiv_papers(q: str = Query(..., title="Search Query"), max_results: int = 30):
-    """Route for fetching AI research papers from arXiv."""
-    return {"papers": await fetch_arxiv_papers(q, max_results)}
+async def search_arxiv_papers(
+    q: str = Query(..., title="Search Query"), 
+    max_results: int = Query(10, title="Max Results Per Page"),
+    page: int = Query(1, title="Page Number")
+):
+    """Route for fetching AI research papers from arXiv with pagination."""
+    papers = await fetch_arxiv_papers(q, max_results, page)
+    
+    return {
+        "page": page,
+        "max_results": max_results,
+        "papers": papers
+    }
 
+@app.get("/search-blogs")
+async def search_arxiv_papers(
+    q: str = Query(..., title="Search Query"), 
+    max_results: int = Query(10, title="Max Results Per Page"),
+):
+    """Route for fetching AI research papers from arXiv with pagination."""
+    papers = await fetch_blogs(q, max_results)
+    
+    return {
+        "max_results": max_results,
+        "blogs": papers
+    }
 
 @app.get("/get-resources")
 async def get_resources(q: str = Query(..., title="Search Query"), max_results: int = 50):
