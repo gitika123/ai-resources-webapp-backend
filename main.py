@@ -13,6 +13,8 @@ import urllib.request
 import praw
 import os
 from dotenv import load_dotenv
+from pydantic import BaseModel
+import openai
 
 load_dotenv()
 
@@ -24,7 +26,11 @@ ARXIV_API_URL = "http://export.arxiv.org/api/query"
 GITHUB_API_BASE_URL = "https://api.github.com/repos"
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+# Ensure API key is set
+if not OPENAI_API_KEY:
+    raise ValueError("OpenAI API Key is missing. Set it in the .env file.")
 
 # Allow CORS for frontend requests
 origins = [
@@ -54,6 +60,11 @@ reddit = praw.Reddit(
     client_secret=CLIENT_SECRET,  # Your client_secret
     user_agent="python:ai-hub:v1.0 (by /u/Last_Internet_9156)"  # Your custom user agent
 )
+
+openai.api_key = OPENAI_API_KEY
+
+class ChatRequest(BaseModel):
+    message: str
 
 
 async def fetch_github_repos(query: str, per_page: int = 30, page: int = 1):
@@ -486,3 +497,26 @@ async def get_filtered_resources(
             status_code=500, 
             detail=f"Failed to fetch filtered resources: {str(e)}\n{error_trace}"
         )
+
+
+
+@app.post("/chat")
+async def chatbot(query: ChatRequest):
+    """Chatbot API using OpenAI's GPT model"""
+    user_message = query.message
+
+    try:
+        response = openai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a helpful AI assistant."},
+                {"role": "user", "content": user_message}
+            ],
+            # max_tokens=100
+        )
+
+        reply = response.choices[0].message.content
+        return {"response": reply}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
