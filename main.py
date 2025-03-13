@@ -15,6 +15,9 @@ import os
 from dotenv import load_dotenv
 from pydantic import BaseModel
 import openai
+from sse_starlette.sse import EventSourceResponse
+from fastapi.responses import StreamingResponse
+
 
 load_dotenv()
 
@@ -411,39 +414,6 @@ async def v2_get_resources(
         )
 
 
-# @app.get("/get-filtered-resources")
-# async def get_filtered_resources(
-#     q: str = Query(..., title="Search Query"),
-#     filters: str = Query("", title="Filter Categories"),  # Comma-separated filters
-#     max_results: int = 20,
-#     page: int = 1
-# ):
-#     try:
-#         selected_filters = filters.split(",") if filters else []
-#         results = []
-
-#         if "github" in selected_filters:
-#             results += await fetch_github_repos(q, per_page=30)
-
-#         if "research_papers" in selected_filters:
-#             results += await fetch_arxiv_papers(q, max_results=30)
-
-#         # Add more conditions for other data sources if needed
-
-#         ranked_results = rank_results(q, results)
-        
-#         start_idx = (page - 1) * max_results
-#         end_idx = start_idx + max_results
-#         paginated_results = ranked_results[start_idx:end_idx]
-
-#         return {
-#             "results": paginated_results,
-#             "total_results": len(ranked_results),
-#             "page": page,
-#             "max_results": max_results,
-#         }
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Failed to fetch filtered resources: {str(e)}")
 
 @app.get("/get-filtered-resources")
 async def get_filtered_resources(
@@ -505,18 +475,31 @@ async def chatbot(query: ChatRequest):
     """Chatbot API using OpenAI's GPT model"""
     user_message = query.message
 
-    try:
-        response = openai.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are a helpful AI assistant."},
-                {"role": "user", "content": user_message}
-            ],
-            # max_tokens=100
-        )
-
-        reply = response.choices[0].message.content
-        return {"response": reply}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    async def stream_response():
+        try:
+            response_stream = openai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a helpful AI assistant."},
+                    {"role": "user", "content": user_message}
+                ],
+                stream=True  # Enable streaming
+            )
+            
+            # Iterate through the streaming response
+            # The OpenAI SDK returns an iterator, not an async iterator
+            for chunk in response_stream:
+                if chunk.choices and len(chunk.choices) > 0:
+                    content = chunk.choices[0].delta.content
+                    if content:
+                        yield f"data: {content}\n\n"
+                        
+            yield "data: [DONE]\n\n"
+            
+        except Exception as e:
+            yield f"data: Error: {str(e)}\n\n"
+            
+    return StreamingResponse(
+        stream_response(),
+        media_type="text/event-stream"
+    )
