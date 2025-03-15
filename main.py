@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, status
 import httpx
 from fastapi.middleware.cors import CORSMiddleware
 import xml.etree.ElementTree as ET
@@ -17,12 +17,44 @@ from pydantic import BaseModel
 import openai
 from sse_starlette.sse import EventSourceResponse
 from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from passlib.context import CryptContext
+from database import get_db
+import models
+from pydantic import BaseModel
+from models import User
+import bcrypt
+from fastapi.responses import JSONResponse
+from passlib.context import CryptContext
+
 
 
 load_dotenv()
 
 
 app = FastAPI()
+
+auth_router = APIRouter()
+# app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
+# app.include_router(bookmark_router, prefix="/bookmarks", tags=["Bookmarks"])
+
+def hash_password(password: str) -> str:
+    # Generate a salt
+    salt = bcrypt.gensalt()
+    # Hash the password with the salt
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed_password.decode('utf-8')
+
+# Initialize the password context
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Define the verify_password function
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 GITHUB_API_URL = "https://api.github.com/search/repositories"
 ARXIV_API_URL = "http://export.arxiv.org/api/query"
@@ -68,6 +100,14 @@ openai.api_key = OPENAI_API_KEY
 
 class ChatRequest(BaseModel):
     message: str
+
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
 
 
 async def fetch_github_repos(query: str, per_page: int = 30, page: int = 1):
@@ -503,3 +543,35 @@ async def chatbot(query: ChatRequest):
         stream_response(),
         media_type="text/event-stream"
     )
+
+
+@app.post("/signup")
+async def signup(request: SignupRequest, db: Session = Depends(get_db)):
+    # Check if user already exists
+    db_user = db.query(User).filter(User.email == request.email).first()
+    if db_user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+
+    # Create new user
+    hashed_password = hash_password(request.password)
+    new_user = User(email=request.email, hashed_password=hashed_password)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return JSONResponse(status_code=201, content={"message": "User created successfully"})
+
+@app.post("/login")
+async def login(request: LoginRequest, db: Session = Depends(get_db)):
+    # Find the user in the database
+    db_user = db.query(User).filter(User.email == request.email).first()
+    if not db_user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect email or password")
+    
+    # Verify password
+    if not verify_password(request.password, db_user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect email or password")
+
+    # Set session (e.g., store user ID in cookie for simplicity)
+    response = JSONResponse(content={"message": "Login successful"})
+    response.set_cookie(key="user_id", value=str(db_user.id), httponly=True)
+    return response
