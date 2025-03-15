@@ -16,14 +16,11 @@ class Bookmark(Base):
     __tablename__ = "bookmarks"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
-    resource_id = Column(String, nullable=False)
-    resource_type = Column(String, nullable=False)  # 'github_repo', 'blog', 'research_paper'
-    title = Column(Text, nullable=False)
-    description = Column(Text)
-    url = Column(Text, nullable=False)
-    created_at = Column(TIMESTAMP, server_default=func.now())
+    url = Column(String, index=True)  # URL of the bookmark
+    title = Column(String)  # Title or name of the resource
+    description = Column(String)  # Description of the resource
+    resource_type = Column(String)  # Type of the resource (e.g., 'GitHub', 'Blog', 'Research Paper')
+    user_id = Column(Integer, ForeignKey("users.id"))  # Foreign key to associate with user
 
-    user = relationship("User", back_populates="bookmarks")
+    user = relationship("User", back_populates="bookmarks")  # Change 'owner' to 'user'
 
-    __table_args__ = (UniqueConstraint("user_id", "resource_id", "resource_type", name="unique_bookmark"),)
